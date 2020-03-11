@@ -140,11 +140,6 @@ function bring_up_target_cluster () {
     done
   done
 
-  if [ "$LOGLEVEL" -ge 3 ]
-    echo "Sleeping for 60..."
-    sleep 60
-  fi
-
   echo "Staring etcd restore..."
   rke etcd snapshot-restore --name "$snapshot_name"
 
