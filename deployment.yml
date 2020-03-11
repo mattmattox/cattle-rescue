@@ -33,6 +33,9 @@ spec:
       containers:
         - name: cattle-rescue
           image: cube8021/cattle-rescue:v0.0
+          env:
+            - name: LOGLEVEL
+              value: 3
         - name: leader-elector
           image: "k8s.gcr.io/leader-elector:0.5"
           args:

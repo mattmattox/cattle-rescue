@@ -1,4 +1,4 @@
-#!/bin/bash +x
+#!/bin/bash
 
 function update_health_status () {
   TIMESTAMP="$(date +%s)"
@@ -45,6 +45,13 @@ do
     echo "Pair: $pair"
     mkdir -p /tmp/"$pair"
 
+    if [ "$LOGLEVEL" -ge 3 ]
+    then
+      echo "Dumping configmap pair - Start"
+      kubectl get configmaps "$pair" -o json
+      echo "Dumping configmap pair - End"
+    fi
+
     echo "Getting current active Cluster..."
     Preferred=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
     if [[ "$Preferred" == 'primary' ]]
@@ -58,6 +65,13 @@ do
     fi
 
     echo "Current Active cluster: $ActiveCluster"
+
+    if [ "$LOGLEVEL" -ge 3 ]
+    then
+      echo "Dumping configmap ActiveCluster - Start"
+      kubectl get configmaps "$ActiveCluster" -o json
+      echo "Dumping configmap ActiveCluster - End"
+    fi
 
     echo "Getting SSH Key..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.ssh_key > /tmp/"$pair"/"$ActiveCluster"/ssh-key
