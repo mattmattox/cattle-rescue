@@ -4,11 +4,11 @@ function flip_provider_cloudflare () {
   pair=$1
   SourceCluster=$2
   TargetCluster=$3
-  cloudflare_auth_email=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.cloudflare_auth_email | tr -d '"'`
-  cloudflare_auth_key=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.cloudflare_auth_key | tr -d '"'`
-  zone=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.zone | tr -d '"'`
-  dnsrecord=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.dnsrecord | tr -d '"'`
-  ip=`kubectl get configmaps "$TargetCluster" -o json | jq .data.flip_provider_data.cloudflare_record | tr -d '"'`
+  cloudflare_auth_email=`kubectl get configmaps "$pair" -o json | jq .data.cloudflare_auth_email | tr -d '"'`
+  cloudflare_auth_key=`kubectl get configmaps "$pair" -o json | jq .data.cloudflare_auth_key | tr -d '"'`
+  zone=`kubectl get configmaps "$pair" -o json | jq .data.cloudflare_zone | tr -d '"'`
+  dnsrecord=`kubectl get configmaps "$pair" -o json | jq .data.cloudflare_dnsrecord | tr -d '"'`
+  ip=`kubectl get configmaps "$TargetCluster" -o json | jq .data.cloudflare_record | tr -d '"'`
   if [ "$LOGLEVEL" -ge 3 ]
   then
     echo "pair: $pair"
@@ -101,7 +101,7 @@ function bring_up_target_cluster () {
     echo "snapshot_name: $snapshot_name"
   fi
   cd /tmp/"$pair"/"$TargetCluster"/
-  DIR=$(echo /tmp/"$pair"/"$TargetCluster"/)
+  DIR=$(echo /tmp/"$pair"/"$TargetCluster")
   if [[ ! "$(pwd)" == "$DIR" ]]
   then
     if [ "$LOGLEVEL" -ge 3 ]
@@ -121,20 +121,20 @@ function bring_up_target_cluster () {
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
   done
   echo "Cleaning cluster..."
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
-    ssh "$SSH_USER"@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
   done
   echo "Rolling docker restart..."
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh "$SSH_USER"@"$node" "systemctl restart docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "systemctl restart docker"
     echo "Waiting for docker is to start..."
-    while ! ssh "$SSH_USER"@"$node" "docker ps"
+    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "docker ps"
     do
       echo "Sleeping..."
     done
@@ -211,9 +211,9 @@ function bring_up_target_cluster () {
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh "$SSH_USER"@"$node" "systemctl restart docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "systemctl restart docker"
     echo "Waiting for etcd is to start..."
-    while ! ssh "$SSH_USER"@"$node" "docker inspect -f '{{.State.Running}}' etcd"
+    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "docker inspect -f '{{.State.Running}}' etcd"
     do
       echo "Sleeping..."
     done
@@ -271,7 +271,7 @@ function soft_cluster_failover () {
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
   done
   echo "Calling Flip Provider..."
   flip_dns $pair $SourceCluster $TargetCluster
