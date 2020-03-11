@@ -26,7 +26,7 @@ EOF
 
 function check_cluster_health () {
   echo "Checking cluster health..."
-  kubectl --kubeconfig /tmp/"$pair"/"$1"/kube_config_cluster.yml cluster-info
+  kubectl --kubeconfig /tmp/"$pair"/"$1"/kube_config_cluster.yml get nodes
 }
 
 function soft_cluster_failover () {
@@ -49,19 +49,14 @@ do
     Preferred=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
     if [[ "$Preferred" == 'primary' ]]
     then
-      ClusterActive=`kubectl get configmaps "$pair" -o json | jq .data.primary | tr -d '"'`
+      ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.primary | tr -d '"'`
     fi
 
     if [[ "$Preferred" == 'secondary' ]]
     then
-      ClusterActive=`kubectl get configmaps "$pair" -o json | jq .data.secondary | tr -d '"'`
+      ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.secondary | tr -d '"'`
     fi
 
-    if [[ -z "$ClusterActive" ]]
-    then
-      echo "Error"
-      continue
-    fi
     echo "Current Active cluster: $ActiveCluster"
 
     echo "Getting SSH Key..."
