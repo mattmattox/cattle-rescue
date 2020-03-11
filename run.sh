@@ -115,26 +115,27 @@ function bring_up_target_cluster () {
   fi
   echo "Setting SSH access..."
   SSH_USER=`cat ./ssh-user`
-  unlink /root/.ssh/id_rsa
-  ln -s ./ssh-key /root/.ssh/id_rsa
+  eval "$(ssh-agent -s)"
+  ssh-add -D
+  ssh-add ./ssh-key
   echo "Starting docker on $TargetCluster"
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
   done
   echo "Cleaning cluster..."
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
   done
   echo "Rolling docker restart..."
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "systemctl restart docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@"$node" "systemctl restart docker"
     echo "Waiting for docker is to start..."
-    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "docker ps"
+    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@"$node" "docker ps"
     do
       echo "Sleeping..."
     done
@@ -211,9 +212,9 @@ function bring_up_target_cluster () {
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "systemctl restart docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@"$node" "systemctl restart docker"
     echo "Waiting for etcd is to start..."
-    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@"$node" "docker inspect -f '{{.State.Running}}' etcd"
+    while ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@"$node" "docker inspect -f '{{.State.Running}}' etcd"
     do
       echo "Sleeping..."
     done
@@ -262,8 +263,9 @@ function soft_cluster_failover () {
   cd /tmp/"$pair"/"$SourceCluster"/
   echo "Setting SSH access..."
   SSH_USER=`cat ./ssh-user`
-  unlink /root/.ssh/id_rsa
-  ln -s ./ssh-key /root/.ssh/id_rsa
+  eval "$(ssh-agent -s)"
+  ssh-add -D
+  ssh-add ./ssh-key
   echo "Taking snapshot of $SourceCluster"
   snapshot_name=`echo CattleRescue-"$DATE"`
   rke etcd snapshot-save --name "$snapshot_name"
@@ -271,7 +273,7 @@ function soft_cluster_failover () {
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
     echo "Node: $node"
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ./ssh-key "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
   done
   echo "Calling Flip Provider..."
   flip_dns $pair $SourceCluster $TargetCluster
@@ -341,8 +343,6 @@ do
     echo "Getting SSH Key..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.ssh_key > /tmp/"$pair"/"$ActiveCluster"/ssh-key
     chmod 400 /tmp/"$pair"/"$ActiveCluster"/ssh-key
-    unlink /root/.ssh/id_rsa
-    ln -s /tmp/"$pair"/"$ActiveCluster"/ssh-key /root/.ssh/id_rsa
 
     echo "Getting cluster.yml..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.cluster_yml > /tmp/"$pair"/"$ActiveCluster"/cluster.yml
