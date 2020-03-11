@@ -90,7 +90,7 @@ do
       echo "Preferred and Active match, no failover required"
     else
       echo "Preferred and Active do not match, need to do a soft failover."
-      soft_cluster_failover ()
+      soft_cluster_failover $ActiveCluster $PreferredCluster
     fi
 
   done
