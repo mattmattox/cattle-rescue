@@ -312,7 +312,8 @@ do
     fi
 
     echo "Getting current active Cluster..."
-    Preferred=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
+    PreferredCluster=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
+    Preferred=`kubectl get configmaps "$pair" -o json | grep $PreferredCluster | grep -v 'active\|preferred' | awk '{print $1}' | tr -d '":'`
     if [[ "$Preferred" == 'primary' ]]
     then
       ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.primary | tr -d '"'`
