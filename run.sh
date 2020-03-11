@@ -386,6 +386,11 @@ do
     PreferredCluster=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
     ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.active | tr -d '"'`
 
+    if [ "$LOGLEVEL" -ge 3 ]
+    then
+      echo "PreferredCluster: $PreferredCluster"
+      echo "ActiveCluster: $ActiveCluster"
+    fi
     if [[ "$PreferredCluster" == "$ActiveCluster" ]]
     then
       echo "Preferred and Active match, no failover required"
