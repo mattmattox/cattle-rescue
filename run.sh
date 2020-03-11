@@ -10,6 +10,17 @@ function update_health_status () {
   fi
 }
 
+function check_cluster_health () {
+  echo "Checking cluster health..."
+  kubectl --kubeconfig /tmp/"$pair"/"$1"/kube_config_cluster.yml cluster-info
+}
+
+function cluster_failover () {
+  SourceCluster=$1
+  TargetCluster=$2
+  echo "Starting failover from $SourceCluster to $TargetCluster"
+}
+
 mkdir -p /root/.ssh
 
 while true
@@ -55,17 +66,32 @@ do
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.kube_config_cluster_yml > /tmp/"$pair"/"$ActiveCluster"/kube_config_cluster.yml
 
     echo "Checking cluster health..."
-    kubectl --kubeconfig /tmp/"$pair"/"$ActiveCluster"/kube_config_cluster.yml cluster-info
+    ActiveClusterStatus="UNKNOWN"
+    check_cluster_health "$ActiveCluster"
     if [ $? -eq 0 ]
     then
       echo "Cluster $ActiveCluster is healthy"
+      ActiveClusterStatus="OK"
       update_health_status "OK"
     else
       echo "Cluster $ActiveCluster is unhealthy"
+      ActiveClusterStatus="CRITICAL"
       update_health_status "CRITICAL"
-
-      //Jump into Cluster unhealthy steps
+      check_cluster_health "$ActiveCluster"
     fi
+
+    ##Looking for soft failover event by comparing ActiveCluster and Preferred
+    PreferredCluster=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
+    ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.active | tr -d '"'`
+
+    if [[ "$PreferredCluster" == "$ActiveCluster" ]]
+    then
+      echo "Preferred and Active match, no failover required"
+    else
+      echo "Preferred and Active do not match, need to failover."
+      cluster_failover ()
+    fi
+
 
     #echo "Running rke up..."
     #cd /tmp/"$pair"/"$ActiveCluster"/
