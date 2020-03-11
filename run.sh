@@ -1,5 +1,46 @@
 #!/bin/bash
 
+function flip_provider_cloudflare () {
+  pair=$1
+  SourceCluster=$2
+  TargetCluster=$3
+  cloudflare_auth_email=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.cloudflare_auth_email | tr -d '"'`
+  cloudflare_auth_key=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.cloudflare_auth_key | tr -d '"'`
+  zone=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.zone | tr -d '"'`
+  dnsrecord=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.dnsrecord | tr -d '"'`
+  ip=`kubectl get configmaps "$TargetCluster" -o json | jq .data.flip_provider_data.cloudflare_record | tr -d '"'`
+  # get the zone id for the requested zone
+  zoneid=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$zone&status=active" \
+  -H "X-Auth-Email: $cloudflare_auth_email" \
+  -H "X-Auth-Key: $cloudflare_auth_key" \
+  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+  echo "Zoneid for $zone is $zoneid"
+  # get the dns record id
+  dnsrecordid=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records?type=CNAME&name=$dnsrecord" \
+    -H "X-Auth-Email: $cloudflare_auth_email" \
+    -H "X-Auth-Key: $cloudflare_auth_key" \
+    -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+  echo "DNSrecordid for $dnsrecord is $dnsrecordid"
+  # update the record
+  curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records/$dnsrecordid" \
+    -H "X-Auth-Email: $cloudflare_auth_email" \
+    -H "X-Auth-Key: $cloudflare_auth_key" \
+    -H "Content-Type: application/json" \
+    --data "{\"type\":\"CNAME\",\"name\":\"$dnsrecord\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}" | jq
+}
+
+function flip_dns () {
+  pair=$1
+  SourceCluster=$2
+  TargetCluster=$3
+  FlipProvider=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider | tr -d '"'`
+  if [[ "$FlipProvider" == "cloudflare" ]]
+  then
+    echo "Using CloudFlare are Flip Provider"
+    flip_provider_cloudflare $pair $SourceCluster $TargetCluster
+  fi
+}
+
 function update_health_status () {
   TIMESTAMP="$(date +%s)"
   if [[ "$Preferred" == 'primary' ]]
@@ -30,9 +71,56 @@ function check_cluster_health () {
 }
 
 function soft_cluster_failover () {
+  DATE=`date +%s`
   SourceCluster=$1
   TargetCluster=$2
   echo "Starting soft failover from $SourceCluster to $TargetCluster"
+  cd /tmp/"$pair"/"$SourceCluster"/
+  echo "Setting SSH access..."
+  SSH_USER=`cat ./ssh-user`
+  unlink /root/.ssh/id_rsa
+  ln -s ./ssh-key /root/.ssh/id_rsa
+  echo "Taking snapshot of $SourceCluster"
+  snapshot_name=`echo CattleRescue-"$DATE"`
+  rke etcd snapshot-save --name "$snapshot_name"
+  echo "Shutting down docker on $SourceCluster"
+  for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
+  do
+    ssh "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
+  done
+  echo "Calling Flip Provider..."
+  flip_dns $SourceCluster $TargetCluster
+  echo "Bring up $TargetCluster"
+  cd /tmp/"$pair"/"$TargetCluster"/
+  echo "Setting SSH access..."
+  SSH_USER=`cat ./ssh-user`
+  unlink /root/.ssh/id_rsa
+  ln -s ./ssh-key /root/.ssh/id_rsa
+  echo "Starting docker on $TargetCluster"
+  for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
+  do
+    ssh "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
+  done
+  echo "Cleaning cluster..."
+  for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
+  do
+    ssh "$SSH_USER"@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
+  done
+  echo "Rolling docker restart..."
+  for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
+  do
+    echo "Node $node"
+    ssh "$SSH_USER"@"$node" "systemctl restart docker"
+    echo "Waiting for docker is to start..."
+    while ! ssh "$SSH_USER"@"$node" "docker ps"
+    do
+      echo "Sleeping..."
+    done
+  done
+  echo "Staring etcd restore..."
+  rke etcd snapshot-restore --name "$snapshot_name"
+
+
 }
 
 function hard_cluster_failover () {
@@ -89,6 +177,9 @@ do
     fi
 
     mkdir -p /tmp/"$pair"/"$ActiveCluster"
+
+    echo "Getting SSH User..."
+    kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.ssh_user > /tmp/"$pair"/"$ActiveCluster"/ssh-user
 
     echo "Getting SSH Key..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.ssh_key > /tmp/"$pair"/"$ActiveCluster"/ssh-key
