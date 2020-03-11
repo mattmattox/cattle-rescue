@@ -77,7 +77,8 @@ do
       echo "Cluster $ActiveCluster is unhealthy"
       ActiveClusterStatus="CRITICAL"
       update_health_status "CRITICAL"
-      check_cluster_health "$ActiveCluster"
+      #check_cluster_health "$ActiveCluster"
+      #Need to setup hard failover
     fi
 
     ##Looking for soft failover event by comparing ActiveCluster and Preferred
@@ -91,7 +92,6 @@ do
       echo "Preferred and Active do not match, need to failover."
       cluster_failover ()
     fi
-
 
     #echo "Running rke up..."
     #cd /tmp/"$pair"/"$ActiveCluster"/
