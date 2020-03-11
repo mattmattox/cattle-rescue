@@ -63,6 +63,8 @@ do
     else
       echo "Cluster $ActiveCluster is unhealthy"
       update_health_status "CRITICAL"
+
+      //Jump into Cluster unhealthy steps
     fi
 
     #echo "Running rke up..."
