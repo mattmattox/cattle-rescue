@@ -35,6 +35,21 @@ function soft_cluster_failover () {
   echo "Starting soft failover from $SourceCluster to $TargetCluster"
 }
 
+function hard_cluster_failover () {
+  SourceCluster=$1
+  TargetCluster=$2
+  echo "Starting hard failover from $SourceCluster to $TargetCluster"
+}
+
+if [[ -z $CLUSTER_TIMEOUT ]]
+then
+	CLUSTER_TIMEOUT=360
+  if [ "$LOGLEVEL" -ge 3 ]
+  then
+    echo "Cluster timeout: $CLUSTER_TIMEOUT"
+  fi
+fi
+
 mkdir -p /root/.ssh
 
 while true
@@ -73,6 +88,8 @@ do
       echo "Dumping configmap ActiveCluster - End"
     fi
 
+    mkdir -p /tmp/"$pair"/"$ActiveCluster"
+
     echo "Getting SSH Key..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.ssh_key > /tmp/"$pair"/"$ActiveCluster"/ssh-key
     chmod 400 /tmp/"$pair"/"$ActiveCluster"/ssh-key
@@ -88,7 +105,6 @@ do
     echo "Getting kube_config_cluster.yml..."
     kubectl get configmaps "$ActiveCluster" -o json | jq -r .data.kube_config_cluster_yml > /tmp/"$pair"/"$ActiveCluster"/kube_config_cluster.yml
 
-    echo "Checking cluster health..."
     ActiveClusterStatus="UNKNOWN"
     check_cluster_health "$ActiveCluster"
     if [ $? -eq 0 ]
@@ -100,11 +116,25 @@ do
       echo "Cluster $ActiveCluster is unhealthy"
       ActiveClusterStatus="CRITICAL"
       update_health_status "CRITICAL"
-      #check_cluster_health "$ActiveCluster"
-      #Need to setup hard failover
+      count=0
+      while true
+      do
+        check_cluster_health "$ActiveCluster"
+        if [ $? -ne 0 ]
+        then
+          echo "Sleeping for $count seconds"
+					sleep 1
+					count=$((count+1))
+        fi
+        if [ $count -gt $CLUSTER_TIMEOUT ]
+        then
+          echo "Starting hard failover"
+          hard_cluster_failover $ActiveCluster $PreferredCluster
+          break
+        fi
+      done
     fi
 
-    ##Looking for soft failover event by comparing ActiveCluster and Preferred
     PreferredCluster=`kubectl get configmaps "$pair" -o json | jq .data.preferred | tr -d '"'`
     ActiveCluster=`kubectl get configmaps "$pair" -o json | jq .data.active | tr -d '"'`
 

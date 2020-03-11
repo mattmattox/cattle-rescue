@@ -36,6 +36,8 @@ spec:
           env:
             - name: LOGLEVEL
               value: "3"
+            - name: CLUSTER_TIMEOUT
+              value: "360"
         - name: leader-elector
           image: "k8s.gcr.io/leader-elector:0.5"
           args:
