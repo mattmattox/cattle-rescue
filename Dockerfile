@@ -20,6 +20,10 @@ RUN chmod +x /usr/local/bin/kubectl
 ADD https://github.com/rancher/rke/releases/download/v1.0.4/rke_linux-amd64 /usr/local/bin/rke
 RUN chmod +x /usr/local/bin/rke
 
+## Adding soft failover script
+ADD soft_failover.sh /usr/local/bin/soft_failover
+RUN chmod +x /usr/local/bin/soft_failover
+
 ## Setup run script
 WORKDIR /root
 ADD run.sh /root/run.sh
