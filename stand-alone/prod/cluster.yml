@@ -1,0 +1,23 @@
+nodes:
+  - address: 54.165.105.176
+    user: root
+    hostname_override: mmattox-prod-ran01
+    internal_address: 172.31.34.237
+    role: [controlplane,worker,etcd]
+  - address: 54.162.86.106
+    user: root
+    hostname_override: mmattox-prod-ran02
+    internal_address: 172.31.36.231
+    role: [controlplane,worker,etcd]
+  - address: 54.175.227.179
+    user: root
+    hostname_override: mmattox-prod-ran03
+    internal_address: 172.31.35.27
+    role: [controlplane,worker,etcd]
+
+services:
+  etcd:
+    backup_config:
+      enabled: true     # enables recurring etcd snapshots
+      interval_hours: 6 # time increment between snapshots
+      retention: 15     # time in days before snapshot purge
