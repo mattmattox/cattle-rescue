@@ -21,19 +21,19 @@ function flip_provider_cloudflare () {
     echo "ip: $ip"
   fi
   # get the zone id for the requested zone
-  zoneid=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$zone&status=active" \
+  zoneid=$(curl -k -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$zone&status=active" \
   -H "X-Auth-Email: $cloudflare_auth_email" \
   -H "X-Auth-Key: $cloudflare_auth_key" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
   echo "Zoneid for $zone is $zoneid"
   # get the dns record id
-  dnsrecordid=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records?type=CNAME&name=$dnsrecord" \
+  dnsrecordid=$(curl -k -s -X GET "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records?type=CNAME&name=$dnsrecord" \
     -H "X-Auth-Email: $cloudflare_auth_email" \
     -H "X-Auth-Key: $cloudflare_auth_key" \
     -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
   echo "DNSrecordid for $dnsrecord is $dnsrecordid"
   # update the record
-  curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records/$dnsrecordid" \
+  curl -k -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zoneid/dns_records/$dnsrecordid" \
     -H "X-Auth-Email: $cloudflare_auth_email" \
     -H "X-Auth-Key: $cloudflare_auth_key" \
     -H "Content-Type: application/json" \
@@ -371,8 +371,8 @@ do
         if [ $? -ne 0 ]
         then
           echo "Sleeping for $count seconds"
-					sleep 1
-					count=$((count+1))
+          sleep 1
+          count=$((count+1))
         fi
         if [ $count -gt $CLUSTER_TIMEOUT ]
         then
@@ -401,5 +401,5 @@ do
 
   done
   echo "Sleeping..."
-  sleep 60
+  sleep 5
 done
