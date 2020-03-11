@@ -4,9 +4,11 @@ function update_health_status () {
   TIMESTAMP="$(date +%s)"
   if [[ "$Preferred" == 'primary' ]]
   then
-    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p '{"data":{"primary_health_status":"$1"},{"primary_health_timestamp":"$TIMESTAMP"}}'
+    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p "{"data":{"primary_health_status":"$1"}}"
+    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p "{"data":{"primary_health_timestamp":"$TIMESTAMP"}}"
   else [[ "$Preferred" == 'secondary' ]]
-    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p '{"data":{"secondary_health_status":"$1"},{"secondary_health_timestamp":"$TIMESTAMP"}}'
+    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p "{"data":{"secondary_health_status":"$1"}}"
+    kubectl -n cattle-rescue patch configmap "$pair" --type merge -p "{"data":{"secondary_health_timestamp":"$TIMESTAMP"}}"
   fi
 }
 
