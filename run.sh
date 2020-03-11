@@ -15,10 +15,10 @@ function check_cluster_health () {
   kubectl --kubeconfig /tmp/"$pair"/"$1"/kube_config_cluster.yml cluster-info
 }
 
-function cluster_failover () {
+function soft_cluster_failover () {
   SourceCluster=$1
   TargetCluster=$2
-  echo "Starting failover from $SourceCluster to $TargetCluster"
+  echo "Starting soft failover from $SourceCluster to $TargetCluster"
 }
 
 mkdir -p /root/.ssh
@@ -89,14 +89,9 @@ do
     then
       echo "Preferred and Active match, no failover required"
     else
-      echo "Preferred and Active do not match, need to failover."
-      cluster_failover ()
+      echo "Preferred and Active do not match, need to do a soft failover."
+      soft_cluster_failover ()
     fi
-
-    #echo "Running rke up..."
-    #cd /tmp/"$pair"/"$ActiveCluster"/
-    #rke up
-    #cd ../
 
   done
   echo "Sleeping..."
