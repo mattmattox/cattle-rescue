@@ -9,6 +9,17 @@ function flip_provider_cloudflare () {
   zone=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.zone | tr -d '"'`
   dnsrecord=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider_data.dnsrecord | tr -d '"'`
   ip=`kubectl get configmaps "$TargetCluster" -o json | jq .data.flip_provider_data.cloudflare_record | tr -d '"'`
+  if [ "$LOGLEVEL" -ge 3 ]
+  then
+    echo "pair: $pair"
+    echo "SourceCluster: $SourceCluster"
+    echo "TargetCluster: $TargetCluster"
+    echo "cloudflare_auth_email: $cloudflare_auth_email"
+    echo "cloudflare_auth_key: $cloudflare_auth_key"
+    echo "zone: $zone"
+    echo "dnsrecord: $dnsrecord"
+    echo "ip: $ip"
+  fi
   # get the zone id for the requested zone
   zoneid=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$zone&status=active" \
   -H "X-Auth-Email: $cloudflare_auth_email" \
@@ -34,6 +45,13 @@ function flip_dns () {
   SourceCluster=$2
   TargetCluster=$3
   FlipProvider=`kubectl get configmaps "$pair" -o json | jq .data.flip_provider | tr -d '"'`
+  if [ "$LOGLEVEL" -ge 3 ]
+  then
+    echo "pair: $pair"
+    echo "SourceCluster: $SourceCluster"
+    echo "TargetCluster: $TargetCluster"
+    echo "FlipProvider: $FlipProvider"
+  fi
   if [[ "$FlipProvider" == "cloudflare" ]]
   then
     echo "Using CloudFlare are Flip Provider"
@@ -75,7 +93,26 @@ function bring_up_target_cluster () {
   SourceCluster=$2
   TargetCluster=$3
   snapshot_name=$4
+  if [ "$LOGLEVEL" -ge 3 ]
+  then
+    echo "pair: $pair"
+    echo "SourceCluster: $SourceCluster"
+    echo "TargetCluster: $TargetCluster"
+    echo "snapshot_name: $snapshot_name"
+  fi
   cd /tmp/"$pair"/"$TargetCluster"/
+  DIR=$(echo /tmp/"$pair"/"$TargetCluster"/)
+  if [[ ! "$(pwd)" == "$DIR" ]]
+  then
+    if [ "$LOGLEVEL" -ge 3 ]
+    then
+      echo "Requested dir: $DIR"
+      echo "Current dir:" `pwd`
+      sleep 60
+    fi
+    echo "Problem, TargetCluster dir is not right. Exiting"
+    exit 2
+  fi
   echo "Setting SSH access..."
   SSH_USER=`cat ./ssh-user`
   unlink /root/.ssh/id_rsa
@@ -83,6 +120,7 @@ function bring_up_target_cluster () {
   echo "Starting docker on $TargetCluster"
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
+    echo "Node: $node"
     ssh "$SSH_USER"@$node "systemctl enable docker; systemctl start docker"
   done
   echo "Cleaning cluster..."
@@ -93,7 +131,7 @@ function bring_up_target_cluster () {
   echo "Rolling docker restart..."
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
-    echo "Node $node"
+    echo "Node: $node"
     ssh "$SSH_USER"@"$node" "systemctl restart docker"
     echo "Waiting for docker is to start..."
     while ! ssh "$SSH_USER"@"$node" "docker ps"
@@ -101,6 +139,12 @@ function bring_up_target_cluster () {
       echo "Sleeping..."
     done
   done
+
+  if [ "$LOGLEVEL" -ge 3 ]
+    echo "Sleeping for 60..."
+    sleep 60
+  fi
+
   echo "Staring etcd restore..."
   rke etcd snapshot-restore --name "$snapshot_name"
 
@@ -108,64 +152,64 @@ function bring_up_target_cluster () {
   for namespace in kube-system cattle-system ingress-nginx
   do
     echo "namespace: $namespace"
-    for token in $(kubectl --kubeconfig kube_config_cluster.yml get secret -n $namespace | grep 'kubernetes.io/service-account-token' | awk '{print $1}')
+    for token in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get secret -n $namespace | grep 'kubernetes.io/service-account-token' | awk '{print $1}')
     do
-      kubectl --kubeconfig kube_config_cluster.yml delete secret -n $namespace $token
+      kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml delete secret -n $namespace $token
     done
   done
 
   echo "Fixing canal..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n kube-system -l k8s-app=canal -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n kube-system -l k8s-app=canal -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing coredns..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n kube-system -l k8s-app=kube-dns -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n kube-system -l k8s-app=kube-dns -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing coredns-autoscaler..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n kube-system -l k8s-app=coredns-autoscaler -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n kube-system -l k8s-app=coredns-autoscaler -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing metrics-server..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n kube-system -l k8s-app=metrics-server -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n kube-system -l k8s-app=metrics-server -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing rke jobs..."
-  for job in $(kubectl --kubeconfig kube_config_cluster.yml get job -n kube-system -o name | grep rke-)
+  for job in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get job -n kube-system -o name | grep rke-)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $job
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n kube-system delete --grace-period=0 --force $job
   done
 
   echo "Fixing nginx-ingress..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n ingress-nginx -l app=ingress-nginx -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n ingress-nginx -l app=ingress-nginx -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n ingress-nginx delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n ingress-nginx delete --grace-period=0 --force $pod
   done
 
   echo "Fixing rancher..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n cattle-system -l app=rancher -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n cattle-system -l app=rancher -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing cattle-node-agent..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n cattle-system -l app=cattle-agent -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n cattle-system -l app=cattle-agent -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
   done
 
   echo "Fixing cattle-cluster-agent..."
-  for pod in $(kubectl --kubeconfig kube_config_cluster.yml get pods -n cattle-system -l app=cattle-cluster-agent -o name)
+  for pod in $(kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml get pods -n cattle-system -l app=cattle-cluster-agent -o name)
   do
-    kubectl --kubeconfig kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
+    kubectl --kubeconfig /tmp/"$pair"/"$TargetCluster"/kube_config_cluster.yml -n cattle-system delete --grace-period=0 --force $pod
   done
 
   echo "Rolling docker restart..."
@@ -231,6 +275,7 @@ function soft_cluster_failover () {
   echo "Shutting down docker on $SourceCluster"
   for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
   do
+    echo "Node: $node"
     ssh "$SSH_USER"@$node "systemctl disable docker; systemctl stop docker"
   done
   echo "Calling Flip Provider..."
