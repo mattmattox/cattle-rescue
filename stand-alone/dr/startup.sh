@@ -8,7 +8,10 @@ done
 echo "Cleaning cluster..."
 for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
 do
-  ssh root@"$node" "curl https://raw.githubusercontent.com/rancherlabs/support-tools/master/extended-rancher-2-cleanup/extended-cleanup-rancher2.sh | bash"
+  echo "Moving etcd snapshots to ~/..."
+  ssh root@"$node" "mv /opt/rke/etcd-snapshots/ ~/"
+  echo "Running cleanup script..."
+  ssh root@"$node" "curl https://gist.githubusercontent.com/mattmattox/56c34f3efb07bdef5e75624f2478f163/raw/352785aa1c66c65622bd19b7552fffafd332f03f/extended-cleanup-rancher2.sh | bash"
 done
 
 echo "Rolling docker restart..."
@@ -22,6 +25,9 @@ do
     echo "Sleeping..."
   done
 done
+
+echo "Pushing snapshots..."
+./push_snapshots.sh
 
 echo "rke etcd restore..."
 rke etcd snapshot-restore --name $1

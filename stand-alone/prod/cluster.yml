@@ -17,7 +17,4 @@ nodes:
 
 services:
   etcd:
-    backup_config:
-      enabled: true     # enables recurring etcd snapshots
-      interval_hours: 6 # time increment between snapshots
-      retention: 15     # time in days before snapshot purge
+    backup_config: null
