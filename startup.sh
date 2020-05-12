@@ -1,15 +1,26 @@
 #!/bin/bash
+cluster=$1
+snapshot=$2
+
+echo "Cluster: $cluster"
+echo "Snapshot: $snapshot"
+
+CPWD=`pwd`
+cd /opt/cattle-rescue/config/"$cluster"/
+
 echo "Starting docker..."
 for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
 do
+  echo "Node: $node"
   ssh root@"$node" "systemctl start docker"
 done
 
 echo "Cleaning cluster..."
 for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
 do
+  echo "Node: $node"
   echo "Moving etcd snapshots to ~/..."
-  ssh root@"$node" "mv /opt/rke/etcd-snapshots/ ~/"
+  ssh root@"$node" "mv /opt/rke/etcd-snapshots/ /opt/rke/etcd-snapshots-bk/"
   echo "Running cleanup script..."
   ssh root@"$node" "curl https://gist.githubusercontent.com/mattmattox/56c34f3efb07bdef5e75624f2478f163/raw/352785aa1c66c65622bd19b7552fffafd332f03f/extended-cleanup-rancher2.sh | bash"
 done
@@ -17,7 +28,7 @@ done
 echo "Rolling docker restart..."
 for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
 do
-  echo "Node $node"
+  echo "Node: $node"
   ssh root@"$node" "systemctl restart docker"
   echo "Waiting for docker is to start..."
   while ! ssh root@"$node" "docker ps"
@@ -26,11 +37,8 @@ do
   done
 done
 
-echo "Pushing snapshots..."
-./push_snapshots.sh
-
 echo "rke etcd restore..."
-rke etcd snapshot-restore --name $1
+rke etcd snapshot-restore --name $snapshot
 
 echo "Fixing tokens..."
 for namespace in kube-system cattle-system ingress-nginx
@@ -99,7 +107,7 @@ done
 echo "Rolling docker restart..."
 for node in $(cat cluster.yml | grep ' address:' | awk '{print $3}')
 do
-  echo "Node $node"
+  echo "Node: $node"
   ssh root@"$node" "systemctl restart docker"
   echo "Waiting for etcd is to start..."
   while ! ssh root@"$node" "docker inspect -f '{{.State.Running}}' etcd"
@@ -111,3 +119,5 @@ done
 
 echo "Running rke up..."
 rke up
+
+cd $CPWD
